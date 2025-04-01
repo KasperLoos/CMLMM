@@ -23,12 +23,13 @@ indicator for being neuro-psychiatric.
 LIBNAME concepts "~/concepts";
 proc contents data=adl varnum; run;
 data adl;
-	set concepts.adl;
+	set concepts.adl; *we create 3 transformations of time to see which one works best for a linear evolution;
 	logtime = log(time);
 	logtimetwo = log((time+9)/10);
 	t = log(1+(time-1)/10);
 run;
-title "plots of different time vars: time, logtime, logtimetwo, t";
+
+title "plots of different time vars: time, logtime, logtimetwo, t"; *test which transformation makes linear;
 proc sgplot data=adl;
     series x=time y=adl / group=ID lineattrs=(thickness=1) transparency=0.3;
     xaxis type=linear;
@@ -50,17 +51,7 @@ proc sgplot data=adl;
     yaxis min=5 max=25;
 run;
 
-
-title"";
-*Are these variables time-varying?;
-proc sql;
-    select id, count(distinct neuro) as unique_values
-    from adl
-    group by id
-    having unique_values > 1;
-quit; *no;
-title"mean evolution of adl by time";
-
+title"mean evolution of adl by time"; *test which transformation makes linear;
 proc sgplot data=adl;
     vline time / response=adl stat=mean limitstat=stderr markers attrid=id;
     xaxis type=linear;  *Ensure time is treated as continuous;
@@ -94,11 +85,23 @@ proc sgplot data=adl;
 run;
 *non-linear evoution for housin=3?;
 
+
+
+
 **********************
 Based on these plots, we see that the log(time) transformation leads to a good linear evolution of ADL
 
 no additional transformations are necessary;
 **********************;
+
+title"";
+*Are these variables time-varying?;
+proc sql;
+    select id, count(distinct neuro) as unique_values
+    from adl
+    group by id
+    having unique_values > 1;
+quit; *no they are not;
 
 ********************************************************************************************************
 Question 1: 						
@@ -110,11 +113,11 @@ Summarize your conclusions. What are the implications with respect to statistica
 	so:
 		we expect it to decrease over time
 		expect it to decrease more for higher intercepts?
-		expect it to decrease faster for younger ppl
+		expect it to decrease faster for younger ppl?
 *************************;
 
-
-proc sgplot data=adl;
+*some more exploratory plots;
+proc sgplot data=adl; 
 	histogram adl / group = housing transparency=.6;
 	where time = 1;
 run;
@@ -133,15 +136,15 @@ proc means data=adl mean std;
 run;
 
 proc sgplot data=adl;
-    series x=time y=adl / group=neuro markers;
+    series x=logtime y=adl / group=neuro markers;
     xaxis label="Days After Operation (1, 5 or 12)";
     yaxis label="Mean ADL Score";
     title "ADL Score Over Time by Neuro Status";
 run;
-*subjects starting high tend to end high as well but some variation. Neuro might influnce change over time;
+*subjects starting high tend to end high as well but some variation. 
+Neuro might influnce change over time as we see people remaining high are mostly NEURO=1;
 
-* 	PART 2 - Tables	 *;
-
+* 	PART 2 of exploratory - Tables	 *;
 proc means data=adl mean std min max n;
     var age adl;
 run;
@@ -149,7 +152,7 @@ run;
 *between patient versus within patient variability;
 proc mixed data=adl method=ml;
     class id time(ref="1");
-    model adl = time / solution;
+    model adl =  / solution;
     random intercept / subject=id;
 run;
 *most of the variance is between patients so a random intercept seems like a good idea;
@@ -160,6 +163,8 @@ proc means data=adl var;
     var adl;
 run;
 *variance gets larger over time -> we might have heteroskedasticity problem -> so test;
+	*THIS COULD BE A PROBLEM WE HAVE TO TAKE INTO ACCOUNT LATER ON;
+
 proc glm data=adl;
     class time;
     model adl = time;
@@ -223,9 +228,9 @@ Estimate the random effects, and produce a scatterplot of the slopes versus the 
 /* Mixed Model Analysis */
 proc mixed data=adl;
     class neuro housing;
-    model adl = logtime neuro / solution;
+    model adl = logtime neuro neuro*logtime/ solution;
     random intercept logtime / subject=ID solution;
-    /* Output the random effects for intercept and slope */
+    * Output the random effects for intercept and slope;
     ods output SolutionR = random_effects;
 run;
 /*
@@ -248,7 +253,15 @@ data random_effects_reshaped;
     drop Effect Estimate StdErrPred DF tValue Probt;
 run;
 
-/* Plot the random intercepts against the random slopes */
+proc sgplot data=random_effects_reshaped;
+    histogram intercept / binwidth=.5 scale=count;
+    xaxis label="Random Intercept";
+    yaxis label="Frequency";
+    title "Histogram of Random Intercept";
+run;
+	
+
+* Plot the random intercepts against the random slopes;
 proc sgplot data=random_effects_reshaped;
     scatter x=Intercept y=Slope / markerattrs=(symbol=circlefilled);
     xaxis label='Random Intercept';
@@ -286,7 +299,7 @@ data random_effects_reshaped;
     drop Effect Estimate StdErrPred DF tValue Probt;
 run;
 
-/* Plot the random intercepts against the random slopes */
+* Plot the random intercepts against the random slopes;
 proc sgplot data=random_effects_reshaped;
     scatter x=Intercept y=Slope / markerattrs=(symbol=circlefilled);
     xaxis label='Random Intercept';
@@ -302,12 +315,12 @@ run;
 This means that depending on Neuro status, respondents ADL evolves differently over time
  (as seen in the plot and expected);
  
- 
- *************************
-* Question 5			*
+
+*********************************************************************************************************
+* Question 5																							*
 Do older patients show different ADL evolutions than younger patients ? Is the evolution of ADL different
 for the different housing situations ?
-************************;
+********************************************************************************************************;
 *age - time interaction;
 proc mixed data=adl;
 	class neuro housing;
@@ -330,5 +343,6 @@ run;
     ods output SolutionR = random_effects;
 run;
  
+
  
  
