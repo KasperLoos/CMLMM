@@ -1,0 +1,334 @@
+*****************************************************************************************
+*				Concepts of Multilevel, Longitudinal and Mixed Models 					*
+* Group C																				*
+* -------------------------------------------------------------------------------------	*
+*																						*
+* Kasper Loos - Arthur Vansimpsen - Mattias Braeckmans - Sven Hellinckx - Jeremy Happé 	*
+*																						*
+****************************************************************************************;
+
+*Assignment:
+The data set considered in this homework results from a longitudinal observational study, the aim of which is to
+study the post-operative evolution of the physical ability of elderly hipfracture patients and their pre-operative
+cognitive status, and to study the effects of housing situation and age on these evolutions.
+
+The physical ability is measured using the ADL (Activities of Daily Living) score, with values between 6 and 24,
+where low values correspond to little physical dependency of the patient, while high scores correspond to high
+physical dependency. The cognitive status is measured through the so-called ‘neuro-status’ which is a binary
+indicator for being neuro-psychiatric.
+;
+
+* Part 0: Data preproc	*
+************************;
+LIBNAME concepts "~/concepts";
+proc contents data=adl varnum; run;
+data adl;
+	set concepts.adl;
+	logtime = log(time);
+	logtimetwo = log((time+9)/10);
+	t = log(1+(time-1)/10);
+run;
+title "plots of different time vars: time, logtime, logtimetwo, t";
+proc sgplot data=adl;
+    series x=time y=adl / group=ID lineattrs=(thickness=1) transparency=0.3;
+    xaxis type=linear;
+    yaxis min=5 max=25;
+run;
+proc sgplot data=adl;
+    series x=logtime y=adl / group=ID lineattrs=(thickness=1) transparency=0.3;
+    xaxis type=linear;
+    yaxis min=5 max=25;
+run;
+proc sgplot data=adl;
+    series x=logtimetwo y=adl / group=ID lineattrs=(thickness=1) transparency=0.3;
+    xaxis type=linear;
+    yaxis min=5 max=25;
+run;
+proc sgplot data=adl;
+    series x=t y=adl / group=ID lineattrs=(thickness=1) transparency=0.3;
+    xaxis type=linear;
+    yaxis min=5 max=25;
+run;
+
+
+title"";
+*Are these variables time-varying?;
+proc sql;
+    select id, count(distinct neuro) as unique_values
+    from adl
+    group by id
+    having unique_values > 1;
+quit; *no;
+title"mean evolution of adl by time";
+
+proc sgplot data=adl;
+    vline time / response=adl stat=mean limitstat=stderr markers attrid=id;
+    xaxis type=linear;  *Ensure time is treated as continuous;
+    yaxis min=10 max=30;
+run;
+title"mean evolution of adl by logtime";
+proc sgplot data=adl;
+    vline logtime / response=adl stat=mean limitstat=stderr markers attrid=id;
+    xaxis type=linear;  *Ensure time is treated as continuous;
+    yaxis min=10 max=30;
+run;
+title"mean evolution of adl by logtime";
+proc sgplot data=adl;
+    vline logtimetwo / response=adl stat=mean limitstat=stderr markers attrid=id;
+    xaxis type=linear;  *Ensure time is treated as continuous;
+    yaxis min=10 max=30;
+run;
+
+title"mean evolution of adl by t";
+proc sgplot data=adl;
+    vline t / response=adl stat=mean limitstat=stderr markers attrid=id;
+    xaxis type=linear;  *Ensure time is treated as continuous;
+    yaxis min=10 max=30;
+run;
+
+title"logtime but split by housing";
+proc sgplot data=adl;
+    vline logtime / response=adl group=housing stat=mean limitstat=stderr markers attrid=id;
+    xaxis type=linear;  *Ensure logtime is treated as continuous;
+    yaxis min=10 max=30;
+run;
+*non-linear evoution for housin=3?;
+
+**********************
+Based on these plots, we see that the log(time) transformation leads to a good linear evolution of ADL
+
+no additional transformations are necessary;
+**********************;
+
+********************************************************************************************************
+Question 1: 						
+Describe the data, and explore the mean structure, the variance structure and the correlation structure.
+Summarize your conclusions. What are the implications with respect to statistical modelling ?
+*******************************************************************************************************;
+
+*ADL: high score: high dependency
+	so:
+		we expect it to decrease over time
+		expect it to decrease more for higher intercepts?
+		expect it to decrease faster for younger ppl
+*************************;
+
+
+proc sgplot data=adl;
+	histogram adl / group = housing transparency=.6;
+	where time = 1;
+run;
+proc sgplot data=adl;
+	histogram adl / group = housing transparency=.6;
+run;
+
+proc freq data=adl;
+    tables neuro housing time;
+run;
+
+*explore mean structure;
+proc means data=adl mean std;
+    class time neuro housing;
+    var adl;
+run;
+
+proc sgplot data=adl;
+    series x=time y=adl / group=neuro markers;
+    xaxis label="Days After Operation (1, 5 or 12)";
+    yaxis label="Mean ADL Score";
+    title "ADL Score Over Time by Neuro Status";
+run;
+*subjects starting high tend to end high as well but some variation. Neuro might influnce change over time;
+
+* 	PART 2 - Tables	 *;
+
+proc means data=adl mean std min max n;
+    var age adl;
+run;
+
+*between patient versus within patient variability;
+proc mixed data=adl method=ml;
+    class id time(ref="1");
+    model adl = time / solution;
+    random intercept / subject=id;
+run;
+*most of the variance is between patients so a random intercept seems like a good idea;
+
+
+proc means data=adl var;
+    class time;
+    var adl;
+run;
+*variance gets larger over time -> we might have heteroskedasticity problem -> so test;
+proc glm data=adl;
+    class time;
+    model adl = time;
+    means time / hovtest=levene;
+run;
+*YES;
+
+*correlation of adl and time;
+proc corr data=adl pearson;
+    var adl;
+    with time;
+run;
+*negative and significant, adl decreases over time (as previously noticed on the plots);
+
+
+
+*************************************
+* Question 2: 		*
+Fit a linear mixed model assuming a linear evolution for the response of every subject, on a log-scale for
+time (i.e., use log(t) as ‘time scale’). Allow for subject-specific intercepts as well as slopes. Compare the
+average evolution of the two neuro groups. Interpret all estimated parameters
+************************************;
+proc mixed data=adl;
+	title "logtime and neuro with random intercept and slope";
+	title2 "unstructured corr matrix";
+	class neuro(ref='0') housing; *we tell SAS which variables are categorical;
+	model adl = logtime neuro/solution; *we specify our fixed model;
+	random intercept logtime /type=un subject=ID g gcorr ; *every individual has its own intercept + random slope logtime;
+run;
+
+proc mixed data=adl;
+	title "logtime and neuro + interaction with random intercept and slope";
+	title2 "unstructured corr matrix";
+	class neuro(ref='0') housing; *we tell SAS which variables are categorical;
+	model adl = logtime neuro neuro*logtime/solution; *add interaction of neuro;
+	random intercept logtime /type=un subject=ID g gcorr ; *every individual has its own intercept + random slope logtime;
+run;
+
+proc mixed data=adl;
+	title "logtime and neuro + interaction + housing and age with random intercept and slope";
+	title2 "no specified corr matrix";
+    class neuro(ref='0') housing;
+    model adl = logtime neuro housing age logtime*neuro / solution;
+    random intercept logtime / subject=ID g gcorr;
+    lsmeans neuro / diff cl;
+run;
+
+proc mixed data=adl;
+	title "logtime and neuro + interaction + housing and age with random intercept and slope";
+	title2 "no specified corr matrix";
+    class neuro(ref='0') housing;
+    model adl = logtime neuro housing age logtime*neuro / solution;
+    random intercept logtime /type=un subject=ID g gcorr;
+    lsmeans neuro / diff cl;
+run;
+
+*************************
+* Question 3			*
+Estimate the random effects, and produce a scatterplot of the slopes versus the intercepts.
+************************;
+/* Mixed Model Analysis */
+proc mixed data=adl;
+    class neuro housing;
+    model adl = logtime neuro / solution;
+    random intercept logtime / subject=ID solution;
+    /* Output the random effects for intercept and slope */
+    ods output SolutionR = random_effects;
+run;
+/*
+proc print data=random_effects; run;
+/**/
+* Reshape the random_effects dataset to have one row per subject with both intercept and slope ;
+data random_effects_reshaped;
+    do until (last.Subject);
+        set random_effects;
+        by Subject;
+        if Effect = 'Intercept' then do;
+            Intercept = Estimate;
+            Intercept_StdErr = StdErrPred;
+        end;
+        else if Effect = 'logtime' then do;
+            Slope = Estimate;
+            Slope_StdErr = StdErrPred;
+        end;
+    end;
+    drop Effect Estimate StdErrPred DF tValue Probt;
+run;
+
+/* Plot the random intercepts against the random slopes */
+proc sgplot data=random_effects_reshaped;
+    scatter x=Intercept y=Slope / markerattrs=(symbol=circlefilled);
+    xaxis label='Random Intercept';
+    yaxis label='Random Slope';
+run;
+
+
+*************************
+* Question 4			*
+In order to correct for important baseline differences between subjects, include the factor ‘housing situation’,
+and the covariate ‘age’. Re-fit the model and check what results are different, when compared to the original
+model. Do the estimates for the random effects change ? Why (not) ?
+************************;
+*full model;
+proc mixed data=adl;
+	class neuro housing;
+	model adl = logtime neuro housing age /solution;
+	random intercept logtime /subject=ID solution;
+    ods output SolutionR = random_effects;
+run;
+
+data random_effects_reshaped;
+    do until (last.Subject);
+        set random_effects;
+        by Subject;
+        if Effect = 'Intercept' then do;
+            Intercept = Estimate;
+            Intercept_StdErr = StdErrPred;
+        end;
+        else if Effect = 'logtime' then do;
+            Slope = Estimate;
+            Slope_StdErr = StdErrPred;
+        end;
+    end;
+    drop Effect Estimate StdErrPred DF tValue Probt;
+run;
+
+/* Plot the random intercepts against the random slopes */
+proc sgplot data=random_effects_reshaped;
+    scatter x=Intercept y=Slope / markerattrs=(symbol=circlefilled);
+    xaxis label='Random Intercept';
+    yaxis label='Random Slope';
+run;
+
+proc mixed data=adl;
+    class neuro housing;
+    model adl = logtime neuro housing age logtime*neuro / solution;
+    random intercept logtime / subject=ID solution;
+run;
+*The main term of neuro is not significant (like we ?want/expect?) but the interaction with time is. 
+This means that depending on Neuro status, respondents ADL evolves differently over time
+ (as seen in the plot and expected);
+ 
+ 
+ *************************
+* Question 5			*
+Do older patients show different ADL evolutions than younger patients ? Is the evolution of ADL different
+for the different housing situations ?
+************************;
+*age - time interaction;
+proc mixed data=adl;
+	class neuro housing;
+	model adl = logtime neuro housing age age*logtime/solution;
+	random intercept logtime /subject=ID solution;
+    ods output SolutionR = random_effects;
+run;
+*house - time interaction;
+proc mixed data=adl;
+	class neuro housing;
+	model adl = logtime neuro housing age housing*logtime/solution;
+	random intercept logtime /subject=ID solution;
+    ods output SolutionR = random_effects;
+run;
+*age - time + house - time interaction;
+ proc mixed data=adl;
+	class neuro housing;
+	model adl = logtime neuro housing age age*logtime housing*logtime /solution;
+	random intercept logtime /subject=ID solution;
+    ods output SolutionR = random_effects;
+run;
+ 
+ 
+ 
