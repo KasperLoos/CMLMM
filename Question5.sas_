@@ -1,0 +1,83 @@
+LIBNAME mydata "/home/u64042931/test/multilevel";
+
+**compare the slope of a 60 ears old with a 80 years old*;
+proc mixed data=MYDATA.ADL;
+	class neuro housing;
+	model adl = logtime neuro housing age NEURO*logtime age*logtime/ solution;
+	random intercept logtime /subject=ID;
+    contrast 'Old (90) vs Young (70) on ADL slope'
+         logtime 0 
+         age*logtime 20;
+    store model_age;
+run;
+**slope for 90years old person is sign different as a slope for a 70 years old person;
+
+**visualize;
+proc plm restore=model_age;
+    effectplot slicefit(x=logtime plotby=neuro) / at(age=70 90) clm;
+run;
+
+* split data set in 'younger' and 'older' groups and compare slopes*;
+data MYDATA.ADL;
+    set MYDATA.ADL;
+    if 65 <= age < 80 then agegrp = 1;  * younger old;
+    else if 80 <= age <= 95 then agegrp = 2;  * older old;
+run;
+
+proc mixed data=MYDATA.ADL;
+    class neuro housing agegrp;
+    model adl = logtime neuro housing agegrp agegrp*logtime NEURO*logtime/ solution;
+    random intercept logtime / subject=ID;
+    contrast 'ADL slope: age 80-95 vs 65-80' 
+             logtime 0 
+             agegrp*logtime 1 -1;
+run;
+**again sign different;
+
+**try again with 3 age groups;
+data MYDATA.ADL;
+    set MYDATA.ADL;
+    if 65 <= age < 75 then agegrp = 1;  * 65-74;
+    else if 75 <= age < 85 then agegrp = 2;  * 75-84;
+    else if 85 <= age =< 95 then agegrp = 3;  * 85-94;
+run;
+
+proc mixed data=MYDATA.ADL;
+    class neuro housing agegrp;
+    model adl = logtime neuro housing agegrp agegrp*logtime logtime*housing NEURO*logtime / solution;
+    random intercept logtime / subject=ID;
+    contrast 'ADL slope: 65-74 vs 75-84' 
+             agegrp*logtime 1 -1 0 ;
+    contrast 'ADL slope: 75-84 vs 85-94' 
+             agegrp*logtime 0 1 -1 ;
+    contrast 'ADL slope: 65-74 vs 85-94' 
+             agegrp*logtime 1 0 -1 ;
+    store model_age2;
+run;
+
+proc plm restore=model_age2;
+    effectplot slicefit(x=logtime plotby=agegrp) / clm;
+run;
+
+**compare slopes of different housings with each other*;
+proc mixed data=MYDATA.ADL;
+    class neuro housing;
+    model adl = logtime neuro housing age logtime*housing NEURO*logtime age*logtime / solution;
+    random intercept logtime / subject=ID;
+    contrast 'Slope: Housing 1 vs 3' 
+         logtime 0 
+         logtime*housing 1 0 -1;
+    contrast 'Slope: Housing 1 vs 2' 
+         logtime 0 
+         logtime*housing 1 -1 0;
+    contrast 'Slope: Housing 2 vs 3' 
+         logtime 0 
+         logtime*housing 0 1 -1;
+    store model_housing;
+run;
+** not sign different
+visualization;
+
+proc plm restore=model_housing; 
+    effectplot slicefit(x=logtime plotby=housing) / clm;
+run;
