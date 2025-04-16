@@ -272,6 +272,20 @@ proc corr data=adl pearson;
 run;
 *negative and significant, adl decreases over time (as previously noticed on the plots);
 
+proc sort data=adl;
+  by id time;
+run;
+
+proc transpose data=adl out=adl_wide prefix=adl_;
+  by id;
+  id time;
+  var adl;
+run;
+
+proc corr data=adl_wide nosimple;
+  var adl_:;
+run;
+
 
 title "";
 *************************************
