@@ -87,7 +87,7 @@ proc sgplot data=adl;
     xaxis type=linear;  *Ensure logtime is treated as continuous;
     yaxis min=10 max=30;
 run;
-*non-linear evoution for housin=3?;
+*non-linear evoution for housing=3?;
 
 
 
@@ -120,6 +120,113 @@ Summarize your conclusions. What are the implications with respect to statistica
 		expect it to decrease faster for younger ppl?
 *************************;
 
+*Exploratory analysis;
+*************************
+*		Tables			*
+*************************;
+title "tables";
+
+proc freq data=adl;
+	table neuro time housing;
+run;
+*70% of patiens are neuro=0;
+*3 time-points (1,5,12)
+*some drop-out at time=12: n=(54,54,35);
+*for housing: n=(46,59,38) ;
+
+proc means data=adl;
+	var adl age;
+run;
+
+proc freq data=adl;
+	table neuro*housing*time / nopercent norow;
+run;
+*neuro=1 seems to be more often in housing=3 and less in housing=1 or housing=2 than neuro=0 
+	-> association between covariates;
+
+proc means data=adl;
+	class time;
+	var adl;
+run; *decrease in adl over time, increase in std. dev.;
+
+proc means data=adl;
+	class neuro time;
+	var adl;
+run;
+*within the neuro=0 group we see a strong decrease, within the neuro=1 group we don't;
+
+proc means data=adl;
+	class housing time;
+	var adl;
+run;
+*within the housing=1 and housing=2 group we see a strong decrease, within the housing=3 group we don't;
+
+
+*explore mean structure;
+proc means data=adl mean std;
+    class time neuro housing;
+    var adl;
+run;
+
+
+*************************
+*		PLOTS			*
+*************************;
+proc sgplot data=adl;
+	series x=logtime y=adl / lineattrs=(color=blue);
+	reg x=logtime y=adl / lineattrs=(color=red thickness=4);
+	xaxis label="Log of Days After Operation (1, 5 or 12)";
+    yaxis label="ADL Score";
+   	title "General plot";
+run;
+proc sgplot data=adl;
+    series x=logtime y=adl / group=neuro markers;
+    xaxis label="Days After Operation (1, 5 or 12)";
+    yaxis label="Mean ADL Score";
+    title "ADL Score Over Time, coloured by Neuro Status";
+run;
+*subjects starting high tend to end high as well but some variation. 
+Neuro might influnce change over time as we see people remaining high are mostly NEURO=1;
+
+proc sgplot data=adl;
+    series x=logtime y=adl / group=housing markers;
+    xaxis label="Days After Operation (1, 5 or 12)";
+    yaxis label="Mean ADL Score";
+    title "ADL Score Over Time, coloured by Housing Status";
+run;
+*subjects starting high tend to end high as well but some variation. 
+Housing might influnce change over time as we see people remaining high are mostly Housing=3;
+
+
+title "panel plots";
+proc sgpanel data=adl;
+	panelby neuro / columns=2 onepanel sparse;
+	series x=logtime y=adl;
+	reg x=logtime y=adl / lineattrs=(color=red thickness=4);
+run;
+
+proc sgpanel data=adl;
+	panelby housing / columns=3 onepanel sparse;
+	series x=logtime y=adl;
+	reg x=logtime y=adl / lineattrs=(color=red thickness=4);
+run;
+
+
+*Just regression;
+
+title "panel plots by neuro, lines colored by housing";
+proc sgpanel data=adl;
+	panelby neuro / columns=2 onepanel sparse;
+	reg x=logtime y=adl / group=housing lineattrs=(thickness=4);
+run;
+
+title "panel plots by housing, lines colored by housing";
+proc sgpanel data=adl;
+	panelby housing / columns=3 onepanel sparse;
+	reg x=logtime y=adl / group=neuro lineattrs=(thickness=4);
+run;
+
+
 *some more exploratory plots;
 proc sgplot data=adl; 
 	histogram adl / group = housing transparency=.6;
@@ -129,39 +236,20 @@ proc sgplot data=adl;
 	histogram adl / group = housing transparency=.6;
 run;
 
-proc freq data=adl;
-    tables neuro housing time;
-run;
+*************************
+*	Other Exploratory	*
+*************************;
 
-*explore mean structure;
-proc means data=adl mean std;
-    class time neuro housing;
-    var adl;
-run;
-
-proc sgplot data=adl;
-    series x=logtime y=adl / group=neuro markers;
-    xaxis label="Days After Operation (1, 5 or 12)";
-    yaxis label="Mean ADL Score";
-    title "ADL Score Over Time by Neuro Status";
-run;
-*subjects starting high tend to end high as well but some variation. 
-Neuro might influnce change over time as we see people remaining high are mostly NEURO=1;
-
-* 	PART 2 of exploratory - Tables	 *;
-proc means data=adl mean std min max n;
-    var age adl;
-run;
-
+title "check variance";
 *between patient versus within patient variability;
-proc mixed data=adl method=ml;
+proc mixed data=adl method=reml;
     class id time(ref="1");
     model adl =  / solution;
     random intercept / subject=id;
 run;
 *most of the variance is between patients so a random intercept seems like a good idea;
 
-
+title "variability tests";
 proc means data=adl var;
     class time;
     var adl;
@@ -176,6 +264,7 @@ proc glm data=adl;
 run;
 *YES;
 
+title "correlation";
 *correlation of adl and time;
 proc corr data=adl pearson;
     var adl;
@@ -184,7 +273,7 @@ run;
 *negative and significant, adl decreases over time (as previously noticed on the plots);
 
 
-
+title "";
 *************************************
 * Question 2: 		*
 Fit a linear mixed model assuming a linear evolution for the response of every subject, on a log-scale for
@@ -341,7 +430,7 @@ run;
 
 *********************************************************************************************************
 * Question 5																							*
-Do older patients show different ADL evolutions than younger patients ? Is the evolution of ADL different
+Do older adl show different ADL evolutions than younger adl ? Is the evolution of ADL different
 for the different housing situations ?
 ********************************************************************************************************;
 
