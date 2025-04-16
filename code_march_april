@@ -21,7 +21,7 @@ indicator for being neuro-psychiatric.
 * Part 0: Data preproc	*
 ************************;
 LIBNAME concepts "~/concepts";
-proc contents data=adl varnum; run;
+
 data adl;
 	set concepts.adl; *we create 3 transformations of time to see which one works best for a linear evolution;
 	logtime = log(time);
@@ -29,6 +29,10 @@ data adl;
 	t = log(1+(time-1)/10);
 run;
 
+proc contents data=adl varnum; run;
+
+
+proc freq data=adl; table age; run;
 title "plots of different time vars: time, logtime, logtimetwo, t"; *test which transformation makes linear;
 proc sgplot data=adl;
     series x=time y=adl / group=ID lineattrs=(thickness=1) transparency=0.3;
@@ -203,33 +207,17 @@ proc mixed data=adl;
 	random intercept logtime /type=un subject=ID g gcorr ; *every individual has its own intercept + random slope logtime;
 run;
 
-proc mixed data=adl;
-	title "logtime and neuro + interaction + housing and age with random intercept and slope";
-	title2 "no specified corr matrix";
-    class neuro(ref='0') housing;
-    model adl = logtime neuro housing age logtime*neuro / solution;
-    random intercept logtime / subject=ID g gcorr;
-    lsmeans neuro / diff cl;
-run;
-
-proc mixed data=adl;
-	title "logtime and neuro + interaction + housing and age with random intercept and slope";
-	title2 "no specified corr matrix";
-    class neuro(ref='0') housing;
-    model adl = logtime neuro housing age logtime*neuro / solution;
-    random intercept logtime /type=un subject=ID g gcorr;
-    lsmeans neuro / diff cl;
-run;
 
 *************************
 * Question 3			*
 Estimate the random effects, and produce a scatterplot of the slopes versus the intercepts.
 ************************;
+title"";
 /* Mixed Model Analysis */
 proc mixed data=adl;
     class neuro housing;
     model adl = logtime neuro neuro*logtime/ solution;
-    random intercept logtime / subject=ID solution;
+   	random intercept logtime /subject=ID type=un solution g gcorr;
     * Output the random effects for intercept and slope;
     ods output SolutionR = random_effects;
 run;
@@ -259,6 +247,13 @@ proc sgplot data=random_effects_reshaped;
     yaxis label="Frequency";
     title "Histogram of Random Intercept";
 run;
+
+proc sgplot data=random_effects_reshaped;
+    histogram Slope / binwidth=.5 scale=count;
+    xaxis label="Random Intercept";
+    yaxis label="Frequency";
+    title "Histogram of Random Intercept";
+run;
 	
 
 * Plot the random intercepts against the random slopes;
@@ -277,9 +272,10 @@ model. Do the estimates for the random effects change ? Why (not) ?
 ************************;
 *full model;
 proc mixed data=adl;
+	title "intercept and time";
 	class neuro housing;
 	model adl = logtime neuro housing age /solution;
-	random intercept logtime /subject=ID solution;
+	random intercept logtime /subject=ID type=un solution g gcorr;
     ods output SolutionR = random_effects;
 run;
 
@@ -307,13 +303,40 @@ proc sgplot data=random_effects_reshaped;
 run;
 
 proc mixed data=adl;
+	title "full model, time*neuro";
     class neuro housing;
     model adl = logtime neuro housing age logtime*neuro / solution;
-    random intercept logtime / subject=ID solution;
+	random intercept logtime /subject=ID type=un solution g gcorr;
 run;
 *The main term of neuro is not significant (like we ?want/expect?) but the interaction with time is. 
 This means that depending on Neuro status, respondents ADL evolves differently over time
  (as seen in the plot and expected);
+ 
+ *age - time interaction;
+proc mixed data=adl;
+	title "full model, time*age";
+	class neuro housing;
+	model adl = logtime neuro housing age age*logtime/solution;
+	random intercept logtime /subject=ID type=un solution g gcorr;
+    ods output SolutionR = random_effects;
+run;
+*house - time interaction;
+proc mixed data=adl;
+	title "full model, time*housing";
+	class neuro housing;
+	model adl = logtime neuro housing age housing*logtime/solution;
+	random intercept logtime /subject=ID type=un solution g gcorr;
+    ods output SolutionR = random_effects;
+run;
+*age - time + house - time interaction;
+proc mixed data=adl;
+	title "full model, time*neuro, time*age, time*housing";
+	class neuro housing;
+	model adl = logtime neuro housing age age*logtime housing*logtime neuro*logtime/solution corrb covb;
+	random intercept logtime /subject=ID type=un solution g gcorr;
+    ods output SolutionR = random_effects;
+run;
+ 
  
 
 *********************************************************************************************************
@@ -321,28 +344,10 @@ This means that depending on Neuro status, respondents ADL evolves differently o
 Do older patients show different ADL evolutions than younger patients ? Is the evolution of ADL different
 for the different housing situations ?
 ********************************************************************************************************;
-*age - time interaction;
-proc mixed data=adl;
-	class neuro housing;
-	model adl = logtime neuro housing age age*logtime/solution;
-	random intercept logtime /subject=ID solution;
-    ods output SolutionR = random_effects;
-run;
-*house - time interaction;
-proc mixed data=adl;
-	class neuro housing;
-	model adl = logtime neuro housing age housing*logtime/solution;
-	random intercept logtime /subject=ID solution;
-    ods output SolutionR = random_effects;
-run;
-*age - time + house - time interaction;
- proc mixed data=adl;
-	class neuro housing;
-	model adl = logtime neuro housing age age*logtime housing*logtime /solution;
-	random intercept logtime /subject=ID solution;
-    ods output SolutionR = random_effects;
-run;
- 
+
+* slides 165: p-values only real for the covariances, not for random variances;
+***
+see code arthur;
 
  
  
