@@ -18,8 +18,9 @@ physical dependency. The cognitive status is measured through the so-called ‘n
 indicator for being neuro-psychiatric.
 ;
 
+*************************
 * Part 0: Data preproc	*
-************************;
+*************************;
 LIBNAME concepts "~/concepts";
 
 data adl;
@@ -107,11 +108,12 @@ proc sql;
     having unique_values > 1;
 quit; *no they are not;
 
-********************************************************************************************************
-Question 1: 						
+*****************************************************************************************************************
+*	Question 1: 																								*					
 Describe the data, and explore the mean structure, the variance structure and the correlation structure.
 Summarize your conclusions. What are the implications with respect to statistical modelling ?
-*******************************************************************************************************;
+*																												*
+*****************************************************************************************************************;
 
 *ADL: high score: high dependency
 	so:
@@ -288,12 +290,13 @@ run;
 
 
 title "";
-*************************************
-* Question 2: 		*
+*****************************************************************************************************************
+*	Question 2: 																								*
 Fit a linear mixed model assuming a linear evolution for the response of every subject, on a log-scale for
 time (i.e., use log(t) as ‘time scale’). Allow for subject-specific intercepts as well as slopes. Compare the
-average evolution of the two neuro groups. Interpret all estimated parameters
-************************************;
+average evolution of the two neuro groups. Interpret all estimated parameters.
+*																												*
+*****************************************************************************************************************;
 proc mixed data=adl;
 	title "logtime and neuro with random intercept and slope";
 	title2 "unstructured corr matrix";
@@ -311,10 +314,11 @@ proc mixed data=adl;
 run;
 
 
-*************************
-* Question 3			*
+*****************************************************************************************************************
+*	Question 3																									*
 Estimate the random effects, and produce a scatterplot of the slopes versus the intercepts.
-************************;
+*																												*
+*****************************************************************************************************************;
 title"";
 /* Mixed Model Analysis */
 proc mixed data=adl;
@@ -353,9 +357,9 @@ run;
 
 proc sgplot data=random_effects_reshaped;
     histogram Slope / binwidth=.5 scale=count;
-    xaxis label="Random Intercept";
+    xaxis label="Random Slopes";
     yaxis label="Frequency";
-    title "Histogram of Random Intercept";
+    title "Histogram of Random Slopes";
 run;
 	
 
@@ -367,12 +371,13 @@ proc sgplot data=random_effects_reshaped;
 run;
 
 
-*************************
-* Question 4			*
+*****************************************************************************************************************
+* Question 4																									*
 In order to correct for important baseline differences between subjects, include the factor ‘housing situation’,
 and the covariate ‘age’. Re-fit the model and check what results are different, when compared to the original
 model. Do the estimates for the random effects change ? Why (not) ?
-************************;
+*																												*
+*****************************************************************************************************************;
 *full model;
 proc mixed data=adl;
 	title "intercept and time";
@@ -396,6 +401,20 @@ data random_effects_reshaped;
         end;
     end;
     drop Effect Estimate StdErrPred DF tValue Probt;
+run;
+* histograms of random intercept and slopes;
+proc sgplot data=random_effects_reshaped;
+    histogram intercept / binwidth=.5 scale=count;
+    xaxis label="Random Intercept";
+    yaxis label="Frequency";
+    title "Histogram of Random Intercept";
+run;
+
+proc sgplot data=random_effects_reshaped;
+    histogram Slope / binwidth=.5 scale=count;
+    xaxis label="Random Slopes";
+    yaxis label="Frequency";
+    title "Histogram of Random Slopes";
 run;
 
 * Plot the random intercepts against the random slopes;
@@ -441,14 +460,45 @@ proc mixed data=adl;
 run;
  
  
+data random_effects_reshaped;
+    do until (last.Subject);
+        set random_effects;
+        by Subject;
+        if Effect = 'Intercept' then do;
+            Intercept = Estimate;
+            Intercept_StdErr = StdErrPred;
+        end;
+        else if Effect = 'logtime' then do;
+            Slope = Estimate;
+            Slope_StdErr = StdErrPred;
+        end;
+    end;
+    drop Effect Estimate StdErrPred DF tValue Probt;
+run;
+* histograms of random intercept and slopes;
+proc sgplot data=random_effects_reshaped;
+    histogram intercept / binwidth=.5 scale=count;
+    xaxis label="Random Intercept";
+    yaxis label="Frequency";
+    title "Histogram of Random Intercept";
+run;
+
+proc sgplot data=random_effects_reshaped;
+    histogram Slope / binwidth=.5 scale=count;
+    xaxis label="Random Slopes";
+    yaxis label="Frequency";
+    title "Histogram of Random Slopes";
+run;
+
+ 
 
 *********************************************************************************************************
-* Question 5																							*
-Do older adl show different ADL evolutions than younger adl ? Is the evolution of ADL different
+*	Question 5																							*
+Do older patients show different ADL evolutions than younger patients? Is the evolution of ADL different
 for the different housing situations ?
+*																										*
 ********************************************************************************************************;
 
-* slides 165: p-values only real for the covariances, not for random variances;
 ***
 see code arthur;
 
